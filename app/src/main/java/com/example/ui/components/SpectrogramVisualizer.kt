@@ -55,7 +55,7 @@ fun SpectrogramVisualizer(
 
             val sliceWidth = width / maxHistorySlices.toFloat()
             val totalSlices = history.size
-            val numBins = history.first.size
+            val numBins = history.first().size
             val binHeight = height / numBins.toFloat()
 
             for (col in 0 until totalSlices) {
