@@ -5,6 +5,7 @@ import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,7 +22,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BookmarkBorder
+import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.Fullscreen
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material.icons.filled.Pause
@@ -34,7 +37,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -57,6 +59,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -66,6 +70,7 @@ import com.example.audio.AudioEngine
 import com.example.data.AppSettings
 import com.example.data.MeasurementEntity
 import com.example.domain.AcousticExplainer
+import com.example.domain.AcousticExplanation
 import com.example.ui.components.ExplanationCard
 import com.example.ui.components.LevelMeterGauge
 import com.example.ui.components.SpectrogramVisualizer
@@ -77,9 +82,10 @@ import com.example.ui.theme.AcousticCyan
 import com.example.ui.theme.DeepNavy
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LiveAnalysisScreen(
     audioEngine: AudioEngine,
@@ -107,7 +113,6 @@ fun LiveAnalysisScreen(
         }
     }
 
-    // Lifecycle: start on screen mount if permitted, stop when leaving
     LaunchedEffect(hasMicPermission) {
         if (hasMicPermission) {
             audioEngine.startCapture()
@@ -122,7 +127,7 @@ fun LiveAnalysisScreen(
         }
     }
 
-    // Tab state: 0 = Waveform, 1 = Spectrum, 2 = Spectrogram, 3 = Explanation
+    // Tabs: 0 = Waveform, 1 = Spectrum, 2 = Spectrogram, 3 = Explanation & Bands
     var selectedTab by remember { mutableIntStateOf(0) }
     val tabs = listOf("צורת גל", "ספקטרום FFT", "ספקטרוגרמה", "הסבר ומדדים")
 
@@ -135,14 +140,30 @@ fun LiveAnalysisScreen(
     var snapshotTitle by remember { mutableStateOf("") }
     var snapshotNotes by remember { mutableStateOf("") }
 
-    // Acoustic explanation
-    val explanation = remember(liveState.metrics, settings) {
-        AcousticExplainer.explain(
-            metrics = liveState.metrics,
-            isCalibrated = settings.isCalibrated,
-            userThresholdDb = settings.alertThresholdDb,
-            referenceSpeechDb = settings.speechReferenceDb
+    // STABLE Acoustic Explanation: Update only once every 1.5 seconds to prevent jumping!
+    var stableExplanation by remember {
+        mutableStateOf(
+            AcousticExplainer.explain(
+                metrics = liveState.metrics,
+                isCalibrated = settings.isCalibrated,
+                userThresholdDb = settings.alertThresholdDb,
+                referenceSpeechDb = settings.speechReferenceDb
+            )
         )
+    }
+
+    LaunchedEffect(settings) {
+        while (isActive) {
+            delay(1500)
+            if (!liveState.isFrozen) {
+                stableExplanation = AcousticExplainer.explain(
+                    metrics = liveState.metrics,
+                    isCalibrated = settings.isCalibrated,
+                    userThresholdDb = settings.alertThresholdDb,
+                    referenceSpeechDb = settings.speechReferenceDb
+                )
+            }
+        }
     }
 
     if (!hasMicPermission) {
@@ -152,26 +173,24 @@ fun LiveAnalysisScreen(
         return
     }
 
+    // Fixed root Column with NO verticalScroll to prevent bouncing!
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(12.dp)
+            .padding(10.dp)
             .testTag("live_analysis_screen")
     ) {
-        // Top Hero Meter
+        // Top Hero Meter (Completely fixed dimensions)
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surface
-            ),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
             elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(12.dp)
+                    .padding(horizontal = 10.dp, vertical = 8.dp)
             ) {
                 LevelMeterGauge(
                     currentDbfs = liveState.metrics.rmsDbfs,
@@ -184,7 +203,7 @@ fun LiveAnalysisScreen(
                     dominantFreqHz = liveState.metrics.dominantFrequencyHz
                 )
 
-                Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(8.dp))
 
                 // Toolbar Actions (Freeze, Reset Stats, Save Snapshot)
                 Row(
@@ -199,17 +218,17 @@ fun LiveAnalysisScreen(
                         Icon(
                             imageVector = if (liveState.isFrozen) Icons.Default.PlayArrow else Icons.Default.Pause,
                             contentDescription = if (liveState.isFrozen) "המשך" else "הקפא",
-                            modifier = Modifier.size(18.dp)
+                            modifier = Modifier.size(16.dp)
                         )
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text(if (liveState.isFrozen) "המשך" else "הקפא")
+                        Text(if (liveState.isFrozen) "המשך" else "הקפא", fontSize = 12.sp)
                     }
 
                     IconButton(
                         onClick = { audioEngine.resetAggregations() },
-                        modifier = Modifier.testTag("reset_stats_button")
+                        modifier = Modifier.testTag("reset_stats_button").size(36.dp)
                     ) {
-                        Icon(Icons.Default.Refresh, contentDescription = "איפוס מדידות")
+                        Icon(Icons.Default.Refresh, contentDescription = "איפוס מדידות", modifier = Modifier.size(20.dp))
                     }
 
                     Button(
@@ -221,15 +240,15 @@ fun LiveAnalysisScreen(
                         colors = ButtonDefaults.buttonColors(containerColor = AcousticBlue),
                         modifier = Modifier.testTag("save_snapshot_button")
                     ) {
-                        Icon(Icons.Default.BookmarkBorder, contentDescription = "שמור מדידה", modifier = Modifier.size(18.dp))
+                        Icon(Icons.Default.BookmarkBorder, contentDescription = "שמור", modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("שמור מדידה")
+                        Text("שמור מדידה", fontSize = 12.sp)
                     }
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(8.dp))
 
         // Visualizer Tabs
         ScrollableTabRow(
@@ -242,110 +261,167 @@ fun LiveAnalysisScreen(
                 Tab(
                     selected = selectedTab == index,
                     onClick = { selectedTab = index },
-                    text = { Text(title, fontSize = 13.sp) },
+                    text = { Text(title, fontSize = 12.sp, fontWeight = if (selectedTab == index) FontWeight.Bold else FontWeight.Normal) },
                     modifier = Modifier.testTag("tab_$index")
                 )
             }
         }
 
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(8.dp))
 
-        // Visualizer Container Card
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(290.dp),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = DeepNavy)
-        ) {
-            when (selectedTab) {
-                0 -> {
-                    // Waveform view with controls
-                    Column(modifier = Modifier.fillMaxSize()) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 8.dp, vertical = 4.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                IconButton(
-                                    onClick = { timeWindowMs = maxOf(10f, timeWindowMs / 2f) },
-                                    modifier = Modifier.size(32.dp)
-                                ) {
-                                    Icon(Icons.Default.ZoomIn, contentDescription = "הגדל", tint = AcousticCyan)
-                                }
-                                IconButton(
-                                    onClick = { timeWindowMs = minOf(500f, timeWindowMs * 2f) },
-                                    modifier = Modifier.size(32.dp)
-                                ) {
-                                    Icon(Icons.Default.ZoomOut, contentDescription = "הקטן", tint = AcousticCyan)
-                                }
-                                Text(
-                                    text = "${timeWindowMs.toInt()}ms",
-                                    fontSize = 11.sp,
-                                    color = AcousticCyan
-                                )
-                            }
-
-                            IconButton(
-                                onClick = { isFullscreenWaveform = true },
-                                modifier = Modifier.size(32.dp)
+        // Tab Content Section
+        if (selectedTab == 3) {
+            // Dedicated Explanations Tab (Scrollable inside its own bounds)
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState())
+            ) {
+                ExplanationCard(
+                    explanation = stableExplanation,
+                    energyBands = liveState.metrics.energyBands
+                )
+            }
+        } else {
+            // Visualizer Container Card (Fills remaining height smoothly without scrolling)
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = DeepNavy)
+            ) {
+                when (selectedTab) {
+                    0 -> {
+                        // Waveform view with controls
+                        Column(modifier = Modifier.fillMaxSize()) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 8.dp, vertical = 2.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(Icons.Default.Fullscreen, contentDescription = "מסך מלא", tint = AcousticCyan)
-                            }
-                        }
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    IconButton(
+                                        onClick = { timeWindowMs = maxOf(10f, timeWindowMs / 2f) },
+                                        modifier = Modifier.size(28.dp)
+                                    ) {
+                                        Icon(Icons.Default.ZoomIn, contentDescription = "הגדל", tint = AcousticCyan, modifier = Modifier.size(18.dp))
+                                    }
+                                    IconButton(
+                                        onClick = { timeWindowMs = minOf(500f, timeWindowMs * 2f) },
+                                        modifier = Modifier.size(28.dp)
+                                    ) {
+                                        Icon(Icons.Default.ZoomOut, contentDescription = "הקטן", tint = AcousticCyan, modifier = Modifier.size(18.dp))
+                                    }
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = "${timeWindowMs.toInt()}ms",
+                                        fontSize = 11.sp,
+                                        color = AcousticCyan
+                                    )
+                                }
 
-                        WaveformVisualizer(
-                            samples = liveState.waveformPoints,
-                            timeWindowMs = timeWindowMs,
-                            isFrozen = liveState.isFrozen,
+                                IconButton(
+                                    onClick = { isFullscreenWaveform = true },
+                                    modifier = Modifier.size(28.dp)
+                                ) {
+                                    Icon(Icons.Default.Fullscreen, contentDescription = "מסך מלא", tint = AcousticCyan, modifier = Modifier.size(18.dp))
+                                }
+                            }
+
+                            WaveformVisualizer(
+                                samples = liveState.waveformPoints,
+                                timeWindowMs = timeWindowMs,
+                                isFrozen = liveState.isFrozen,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .weight(1f)
+                            )
+                        }
+                    }
+                    1 -> {
+                        SpectrumVisualizer(
+                            spectrumDbfs = liveState.spectrumDbfs,
+                            sampleRate = audioEngine.sampleRate,
+                            fftSize = audioEngine.fftSize,
+                            dominantFreqHz = liveState.metrics.dominantFrequencyHz,
+                            useLogScale = settings.useLogFrequencyScale,
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .weight(1f)
+                                .fillMaxSize()
+                                .padding(6.dp)
                         )
                     }
-                }
-                1 -> {
-                    SpectrumVisualizer(
-                        spectrumDbfs = liveState.spectrumDbfs,
-                        sampleRate = audioEngine.sampleRate,
-                        fftSize = audioEngine.fftSize,
-                        dominantFreqHz = liveState.metrics.dominantFrequencyHz,
-                        useLogScale = settings.useLogFrequencyScale,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(8.dp)
-                    )
-                }
-                2 -> {
-                    SpectrogramVisualizer(
-                        currentSpectrumDbfs = liveState.spectrumDbfs,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(8.dp)
-                    )
-                }
-                3 -> {
-                    Box(modifier = Modifier.fillMaxSize().padding(8.dp).verticalScroll(rememberScrollState())) {
-                        ExplanationCard(
-                            explanation = explanation,
-                            energyBands = liveState.metrics.energyBands
+                    2 -> {
+                        SpectrogramVisualizer(
+                            currentSpectrumDbfs = liveState.spectrumDbfs,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(6.dp)
                         )
                     }
                 }
             }
-        }
 
-        Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
-        // Always show the Explanation Card below if not in tab 3
-        if (selectedTab != 3) {
-            ExplanationCard(
-                explanation = explanation,
-                energyBands = liveState.metrics.energyBands
-            )
+            // Fixed-Height Stable Status Bar (One line, click to open full details)
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(46.dp)
+                    .clickable { selectedTab = 3 },
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Info,
+                            contentDescription = null,
+                            tint = AcousticBlue,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = stableExplanation.summaryText,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontSize = 12.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(6.dp))
+
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "להסבר מלא",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = AcousticBlue
+                        )
+                        Icon(
+                            imageVector = Icons.Default.ChevronLeft,
+                            contentDescription = null,
+                            tint = AcousticBlue,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+            }
         }
     }
 

@@ -86,6 +86,7 @@ class AudioEngine(private val context: Context) {
     private var countObserved = 0L
     private var leqCumulativeEnergy: Double? = null
     private var leqCount: Long = 0
+    private var lastUiUpdateTime = 0L
 
     // Recording management
     private var activeWavWriter: WavWriter? = null
@@ -204,15 +205,20 @@ class AudioEngine(private val context: Context) {
                         points[i] = (audioBuffer[sampleIdx].toFloat() / 32768.0f).coerceIn(-1.0f, 1.0f)
                     }
 
-                    _uiState.value = _uiState.value.copy(
-                        metrics = metrics,
-                        waveformPoints = points,
-                        spectrumDbfs = spectrum,
-                        minDbfs = minDbfsObserved,
-                        maxDbfs = maxDbfsObserved,
-                        avgDbfs = if (countObserved > 0) sumDbfsObserved / countObserved else -100.0,
-                        isFrozen = false
-                    )
+                    // Throttle UI updates to ~30 FPS to avoid layout thrashing
+                    val now = System.currentTimeMillis()
+                    if (now - lastUiUpdateTime >= 33L) {
+                        lastUiUpdateTime = now
+                        _uiState.value = _uiState.value.copy(
+                            metrics = metrics,
+                            waveformPoints = points,
+                            spectrumDbfs = spectrum,
+                            minDbfs = minDbfsObserved,
+                            maxDbfs = maxDbfsObserved,
+                            avgDbfs = if (countObserved > 0) sumDbfsObserved / countObserved else -100.0,
+                            isFrozen = false
+                        )
+                    }
                 }
             } else {
                 delay(10)

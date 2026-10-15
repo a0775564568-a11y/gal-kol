@@ -192,50 +192,55 @@ fun LevelMeterGauge(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp),
-            horizontalArrangement = Arrangement.SpaceBetween
+                .padding(horizontal = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             MetricPill(
                 label = "שיא (Peak)",
                 value = String.format(Locale.US, "%.1f", peakDbfs),
-                unit = "dBFS"
+                unit = "dBFS",
+                modifier = Modifier.weight(1f)
             )
             MetricPill(
                 label = "מינימום",
                 value = String.format(Locale.US, "%.1f", minDbfs),
-                unit = "dBFS"
+                unit = "dBFS",
+                modifier = Modifier.weight(1f)
             )
             MetricPill(
                 label = "Leq משוקלל",
                 value = leqDb?.let { String.format(Locale.US, "%.1f", it) } ?: "-",
-                unit = if (isCalibrated) "dB" else "dBFS"
+                unit = if (isCalibrated) "dB" else "dBFS",
+                modifier = Modifier.weight(1f)
             )
             MetricPill(
-                label = "תדר דומיננטי",
+                label = "תדר שיא",
                 value = if (dominantFreqHz > 25f) "${dominantFreqHz.toInt()}" else "-",
-                unit = "Hz"
+                unit = "Hz",
+                modifier = Modifier.weight(1f)
             )
         }
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // Stability Status Badge
+        // Stability Status Badge (Fixed Height, single line)
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
+                .height(26.dp)
                 .background(
                     color = when (stability) {
                         SoundStability.VERY_STABLE -> AcousticGreen.copy(alpha = 0.15f)
                         SoundStability.MODERATE_FLUCTUATION -> AcousticCyan.copy(alpha = 0.15f)
                         SoundStability.HIGH_FLUCTUATION -> AcousticAmber.copy(alpha = 0.15f)
                     },
-                    shape = RoundedCornerShape(12.dp)
+                    shape = RoundedCornerShape(13.dp)
                 )
-                .padding(horizontal = 12.dp, vertical = 4.dp)
+                .padding(horizontal = 10.dp)
         ) {
             Box(
                 modifier = Modifier
-                    .size(8.dp)
+                    .size(7.dp)
                     .background(
                         color = when (stability) {
                             SoundStability.VERY_STABLE -> AcousticGreen
@@ -247,8 +252,9 @@ fun LevelMeterGauge(
             )
             Spacer(modifier = Modifier.width(6.dp))
             Text(
-                text = "${stability.labelHe}: ${stability.descriptionHe}",
+                text = "יציבות שמע: ${stability.labelHe}",
                 fontSize = 11.sp,
+                maxLines = 1,
                 color = MaterialTheme.colorScheme.onSurface
             )
         }
@@ -259,35 +265,41 @@ fun LevelMeterGauge(
 private fun MetricPill(
     label: String,
     value: String,
-    unit: String
+    unit: String,
+    modifier: Modifier = Modifier
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier
+        verticalArrangement = Arrangement.Center,
+        modifier = modifier
+            .height(52.dp)
             .background(
                 MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
                 shape = RoundedCornerShape(8.dp)
             )
-            .padding(horizontal = 10.dp, vertical = 6.dp)
+            .padding(horizontal = 2.dp, vertical = 4.dp)
     ) {
         Text(
             text = label,
             fontSize = 10.sp,
+            maxLines = 1,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         Row(verticalAlignment = Alignment.Bottom) {
             Text(
                 text = value,
                 fontFamily = RobotoMonoFontFamily,
-                fontSize = 13.sp,
+                fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,
+                maxLines = 1,
                 color = MaterialTheme.colorScheme.onSurface
             )
             Spacer(modifier = Modifier.width(2.dp))
             Text(
                 text = unit,
                 fontFamily = RobotoMonoFontFamily,
-                fontSize = 9.sp,
+                fontSize = 8.sp,
+                maxLines = 1,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
