@@ -211,4 +211,32 @@ object ReportExporter {
 
         return file
     }
+
+    fun exportAnomaliesToCsv(context: Context, anomalies: List<com.example.data.AcousticAnomalyEventEntity>): File {
+        val exportDir = File(context.cacheDir, "exports").apply { mkdirs() }
+        val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+        val file = File(exportDir, "galkol_anomalies_$timeStamp.csv")
+
+        file.printWriter().use { out ->
+            out.println("ID,Timestamp,Date,Hour,EventType,PeakDbfs,RmsDbfs,EstimatedDbSpl,ExcessDb,Severity,DominantFrequencyHz,DurationMs,Description")
+            val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
+            val cal = java.util.Calendar.getInstance()
+            for (a in anomalies) {
+                cal.timeInMillis = a.timestamp
+                val hour = cal.get(java.util.Calendar.HOUR_OF_DAY)
+                out.println(
+                    "${a.id},${a.timestamp},\"${dateFormat.format(Date(a.timestamp))}\",$hour," +
+                            "\"${a.eventType}\"," +
+                            "${String.format(Locale.US, "%.2f", a.peakDbfs)}," +
+                            "${String.format(Locale.US, "%.2f", a.rmsDbfs)}," +
+                            "${a.estimatedDbSpl?.let { String.format(Locale.US, "%.2f", it) } ?: "N/A"}," +
+                            "${String.format(Locale.US, "%.2f", a.excessDb)}," +
+                            "\"${a.severity}\"," +
+                            "${String.format(Locale.US, "%.1f", a.dominantFrequencyHz)}," +
+                            "${a.durationMs},\"${a.descriptionHe}\""
+                )
+            }
+        }
+        return file
+    }
 }

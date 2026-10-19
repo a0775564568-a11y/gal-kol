@@ -36,3 +36,33 @@ data class RecordingEntity(
     val peakDbfs: Double = -100.0,
     val rmsDbfs: Double = -100.0
 )
+
+@Entity(tableName = "acoustic_anomalies")
+data class AcousticAnomalyEventEntity(
+    @PrimaryKey(autoGenerate = true)
+    val id: Long = 0,
+    val timestamp: Long = System.currentTimeMillis(),
+    val eventType: String, // "צעקה / שיא עוצמה", "חריגת סף ממושכת", "קטימה דיגיטלית", "צפירה / שריקה"
+    val peakDbfs: Double,
+    val rmsDbfs: Double,
+    val estimatedDbSpl: Double?,
+    val excessDb: Double, // בכמה דציבלים חרג
+    val severity: String, // "קיצונית", "חמורה", "בינונית", "קלה"
+    val dominantFrequencyHz: Float,
+    val durationMs: Long,
+    val descriptionHe: String
+)
+
+@Entity(tableName = "live_sessions_log")
+data class LiveSessionSummaryEntity(
+    @PrimaryKey(autoGenerate = true)
+    val id: Long = 0,
+    val timestamp: Long = System.currentTimeMillis(),
+    val durationSeconds: Long,
+    val avgDbfs: Double,
+    val peakDbfs: Double,
+    val minDbfs: Double,
+    val leqDb: Double,
+    val anomaliesCount: Int,
+    val dominantFrequencyHz: Float
+)

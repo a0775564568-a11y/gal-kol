@@ -49,3 +49,36 @@ interface RecordingDao {
     @Query("DELETE FROM recordings WHERE id = :id")
     suspend fun deleteById(id: Long)
 }
+
+@Dao
+interface AnomalyDao {
+    @Query("SELECT * FROM acoustic_anomalies ORDER BY timestamp DESC")
+    fun getAllAnomalies(): Flow<List<AcousticAnomalyEventEntity>>
+
+    @Query("SELECT * FROM acoustic_anomalies WHERE timestamp >= :sinceTimestamp ORDER BY timestamp DESC")
+    fun getAnomaliesSince(sinceTimestamp: Long): Flow<List<AcousticAnomalyEventEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(anomaly: AcousticAnomalyEventEntity): Long
+
+    @Query("DELETE FROM acoustic_anomalies WHERE id = :id")
+    suspend fun deleteById(id: Long)
+
+    @Query("DELETE FROM acoustic_anomalies")
+    suspend fun deleteAll()
+
+    @Query("SELECT COUNT(*) FROM acoustic_anomalies")
+    fun getCount(): Flow<Int>
+}
+
+@Dao
+interface SessionDao {
+    @Query("SELECT * FROM live_sessions_log ORDER BY timestamp DESC")
+    fun getAllSessions(): Flow<List<LiveSessionSummaryEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(session: LiveSessionSummaryEntity): Long
+
+    @Query("DELETE FROM live_sessions_log")
+    suspend fun deleteAll()
+}

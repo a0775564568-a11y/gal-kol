@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AudioFile
+import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Mic
@@ -41,6 +42,7 @@ import com.example.ui.screens.HistoryScreen
 import com.example.ui.screens.LiveAnalysisScreen
 import com.example.ui.screens.RecordingsScreen
 import com.example.ui.screens.SettingsScreen
+import com.example.ui.screens.StatisticsScreen
 import com.example.ui.theme.GalKolTheme
 import java.io.File
 
@@ -102,8 +104,9 @@ fun MainAppScaffold(
 
     val navItems = listOf(
         Triple("ניתוח חי", Icons.Default.GraphicEq, "nav_live"),
-        Triple("ניתוח קובץ", Icons.Default.AudioFile, "nav_file"),
+        Triple("סטטיסטיקות", Icons.Default.BarChart, "nav_stats"),
         Triple("הקלטות", Icons.Default.Mic, "nav_recordings"),
+        Triple("ניתוח קובץ", Icons.Default.AudioFile, "nav_file"),
         Triple("היסטוריה", Icons.Default.History, "nav_history"),
         Triple("הגדרות", Icons.Default.Settings, "nav_settings")
     )
@@ -120,7 +123,7 @@ fun MainAppScaffold(
                         selected = selectedScreenIndex == index,
                         onClick = { selectedScreenIndex = index },
                         icon = { Icon(icon, contentDescription = label) },
-                        label = { Text(label, fontSize = 11.sp) },
+                        label = { Text(label, fontSize = 10.sp, maxLines = 1) },
                         modifier = Modifier.testTag(tag)
                     )
                 }
@@ -138,23 +141,30 @@ fun MainAppScaffold(
                     settings = settings,
                     onSaveMeasurement = { entity ->
                         database.measurementDao().insert(entity)
+                    },
+                    onOpenStatistics = {
+                        selectedScreenIndex = 1
                     }
                 )
-                1 -> FileAnalysisScreen(
-                    initialFile = fileToAnalyze
+                1 -> StatisticsScreen(
+                    anomalyDao = database.anomalyDao(),
+                    sessionDao = database.sessionDao()
                 )
                 2 -> RecordingsScreen(
                     audioEngine = audioEngine,
                     recordingDao = database.recordingDao(),
                     onAnalyzeRecording = { file ->
                         fileToAnalyze = file
-                        selectedScreenIndex = 1 // Switch to File Analysis tab
+                        selectedScreenIndex = 3 // Switch to File Analysis tab
                     }
                 )
-                3 -> HistoryScreen(
+                3 -> FileAnalysisScreen(
+                    initialFile = fileToAnalyze
+                )
+                4 -> HistoryScreen(
                     measurementDao = database.measurementDao()
                 )
-                4 -> SettingsScreen(
+                5 -> SettingsScreen(
                     settings = settings,
                     onSettingsChanged = { newSettings ->
                         settingsManager.updateSettings(newSettings)

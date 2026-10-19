@@ -19,6 +19,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import com.example.data.AcousticAnomalyEventEntity
+import com.example.data.AppDatabase
+import com.example.data.LiveSessionSummaryEntity
+import com.example.data.MeasurementEntity
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -39,6 +43,8 @@ data class LiveAudioState(
     val recordingDurationMs: Long = 0L,
     val recordingFilePath: String? = null,
     val isFrozen: Boolean = false,
+    val recentAnomaly: AcousticAnomalyEventEntity? = null,
+    val autoSaveCount: Int = 0,
     val errorMessage: String? = null
 )
 
@@ -88,6 +94,14 @@ class AudioEngine(private val context: Context) {
     private var leqCount: Long = 0
     private var lastUiUpdateTime = 0L
 
+    // Automatic Logging & Anomaly Detector
+    private val database = AppDatabase.getInstance(context)
+    private var lastAnomalyLogTime = 0L
+    private var lastAutoSaveTime = 0L
+    private var lastRmsDbfs = -100.0
+    private var sessionStartTime = 0L
+    private var sessionAnomaliesCount = 0
+
     // Recording management
     private var activeWavWriter: WavWriter? = null
     private var activeRecordingFile: File? = null
@@ -127,6 +141,9 @@ class AudioEngine(private val context: Context) {
 
             audioRecord?.startRecording()
             isCapturing.set(true)
+            sessionStartTime = System.currentTimeMillis()
+            lastAutoSaveTime = sessionStartTime
+            sessionAnomaliesCount = 0
             _uiState.value = _uiState.value.copy(isRunning = true, errorMessage = null)
 
             captureJob = scope.launch {
@@ -218,6 +235,99 @@ class AudioEngine(private val context: Context) {
                             avgDbfs = if (countObserved > 0) sumDbfsObserved / countObserved else -100.0,
                             isFrozen = false
                         )
+                    }
+
+                    // Real-Time Anomaly Detection (Screams, Spikes, Clipping, Sirens)
+                    val jump = if (lastRmsDbfs > -95.0) metrics.rmsDbfs - lastRmsDbfs else 0.0
+                    val isScreamOrSpike = metrics.peakDbfs > -8.5 || (jump > 9.5 && metrics.peakDbfs > -22.0)
+                    val isClipping = metrics.hasClipping
+                    val isSiren = metrics.dominantFrequencyHz in 800f..4000f && metrics.crestFactorDb > 14.0 && metrics.rmsDbfs > -22.0
+
+                    if ((isScreamOrSpike || isClipping || isSiren) && (now - lastAnomalyLogTime >= 1200L)) {
+                        lastAnomalyLogTime = now
+                        val eventType = when {
+                            isClipping -> "קטימה דיגיטלית (Clipping)"
+                            metrics.peakDbfs > -4.0 -> "צעקה חזקה / שיא עוצמה קיצוני"
+                            metrics.peakDbfs > -8.5 -> "צעקה / שיא עוצמה פתאומי"
+                            jump > 9.5 -> "קפיצת עוצמה חדה (אימפולס)"
+                            isSiren -> "צפירה / שריקה חריגה"
+                            else -> "חריגת סף אקוסטית"
+                        }
+                        val severity = when {
+                            metrics.peakDbfs > -3.0 || isClipping -> "קיצונית"
+                            metrics.peakDbfs > -9.0 -> "חמורה"
+                            metrics.peakDbfs > -18.0 -> "בינונית"
+                            else -> "קלה"
+                        }
+                        val excess = maxOf(0.0, metrics.peakDbfs - (-20.0))
+                        val anomaly = AcousticAnomalyEventEntity(
+                            timestamp = now,
+                            eventType = eventType,
+                            peakDbfs = metrics.peakDbfs,
+                            rmsDbfs = metrics.rmsDbfs,
+                            estimatedDbSpl = metrics.estimatedDbSpl,
+                            excessDb = excess,
+                            severity = severity,
+                            dominantFrequencyHz = metrics.dominantFrequencyHz,
+                            durationMs = 650L,
+                            descriptionHe = "$eventType בעוצמת שיא של ${String.format(Locale.US, "%.1f", metrics.peakDbfs)} dBFS"
+                        )
+                        scope.launch(Dispatchers.IO) {
+                            database.anomalyDao().insert(anomaly)
+                        }
+                        sessionAnomaliesCount++
+                        _uiState.value = _uiState.value.copy(recentAnomaly = anomaly)
+                        scope.launch {
+                            delay(4500)
+                            if (_uiState.value.recentAnomaly?.id == anomaly.id || _uiState.value.recentAnomaly?.timestamp == anomaly.timestamp) {
+                                _uiState.value = _uiState.value.copy(recentAnomaly = null)
+                            }
+                        }
+                    }
+                    lastRmsDbfs = metrics.rmsDbfs
+
+                    // Automatic Background Session Saving every 10 seconds!
+                    if (now - lastAutoSaveTime >= 10000L && countObserved > 0) {
+                        lastAutoSaveTime = now
+                        val avg = sumDbfsObserved / countObserved
+                        val dur = (now - sessionStartTime) / 1000
+                        val bands = metrics.energyBands
+                        scope.launch(Dispatchers.IO) {
+                            database.sessionDao().insert(
+                                LiveSessionSummaryEntity(
+                                    timestamp = now,
+                                    durationSeconds = dur,
+                                    avgDbfs = avg,
+                                    peakDbfs = maxDbfsObserved,
+                                    minDbfs = minDbfsObserved,
+                                    leqDb = leqCumulativeEnergy?.let { 10.0 * kotlin.math.log10(it) } ?: avg,
+                                    anomaliesCount = sessionAnomaliesCount,
+                                    dominantFrequencyHz = metrics.dominantFrequencyHz
+                                )
+                            )
+                            val timeStr = SimpleDateFormat("HH:mm:ss dd/MM", Locale.US).format(Date(now))
+                            database.measurementDao().insert(
+                                MeasurementEntity(
+                                    title = "ניתוח חי אוטומטי $timeStr",
+                                    timestamp = now,
+                                    durationSeconds = dur.toDouble(),
+                                    rmsDbfs = metrics.rmsDbfs,
+                                    peakDbfs = metrics.peakDbfs,
+                                    minDbfs = minDbfsObserved,
+                                    crestFactorDb = metrics.crestFactorDb,
+                                    dominantFrequencyHz = metrics.dominantFrequencyHz,
+                                    estimatedDbSpl = metrics.estimatedDbSpl,
+                                    leqDb = metrics.leqDb,
+                                    isCalibrated = calibrationOffsetDb != null,
+                                    notes = "נשמר אוטומטית ברקע ($sessionAnomaliesCount חריגות)",
+                                    stabilityLabel = metrics.stabilityIndex.labelHe,
+                                    energyBandsCsv = "${bands.subBass},${bands.bass},${bands.lowMid},${bands.mid},${bands.highMid},${bands.treble},${bands.brilliance}"
+                                )
+                            )
+                            _uiState.value = _uiState.value.copy(
+                                autoSaveCount = _uiState.value.autoSaveCount + 1
+                            )
+                        }
                     }
                 }
             } else {

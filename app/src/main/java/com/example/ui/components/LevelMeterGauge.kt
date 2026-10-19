@@ -84,17 +84,17 @@ fun LevelMeterGauge(
             .testTag("level_meter_gauge"),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Meter Dial Arc
+        // Meter Dial Arc (Compact to leave maximum space for waveform)
         Box(
-            modifier = Modifier.size(240.dp, 150.dp),
+            modifier = Modifier.size(170.dp, 95.dp),
             contentAlignment = Alignment.Center
         ) {
-            Canvas(modifier = Modifier.size(220.dp, 220.dp)) {
-                val strokeWidth = 14.dp.toPx()
+            Canvas(modifier = Modifier.size(160.dp, 160.dp)) {
+                val strokeWidth = 9.dp.toPx()
                 val arcSize = Size(size.width - strokeWidth, size.height - strokeWidth)
                 val topLeft = Offset(strokeWidth / 2, strokeWidth / 2)
 
-                // Background track arc (180 to 360 degrees = bottom half omitted, top semi-circle)
+                // Background track arc
                 drawArc(
                     color = Color.Gray.copy(alpha = 0.2f),
                     startAngle = 150f,
@@ -129,31 +129,31 @@ fun LevelMeterGauge(
                     val angleDeg = 150f + i * (240f / (totalTicks - 1))
                     val angleRad = Math.toRadians(angleDeg.toDouble())
                     val pInner = Offset(
-                        (center.x + (radius - 12.dp.toPx()) * cos(angleRad)).toFloat(),
-                        (center.y + (radius - 12.dp.toPx()) * sin(angleRad)).toFloat()
+                        (center.x + (radius - 8.dp.toPx()) * cos(angleRad)).toFloat(),
+                        (center.y + (radius - 8.dp.toPx()) * sin(angleRad)).toFloat()
                     )
                     val pOuter = Offset(
-                        (center.x + (radius - 4.dp.toPx()) * cos(angleRad)).toFloat(),
-                        (center.y + (radius - 4.dp.toPx()) * sin(angleRad)).toFloat()
+                        (center.x + (radius - 3.dp.toPx()) * cos(angleRad)).toFloat(),
+                        (center.y + (radius - 3.dp.toPx()) * sin(angleRad)).toFloat()
                     )
                     drawLine(
                         color = Color.White.copy(alpha = 0.3f),
                         start = pInner,
                         end = pOuter,
-                        strokeWidth = 2.dp.toPx()
+                        strokeWidth = 1.5.dp.toPx()
                     )
                 }
             }
 
-            // Big Central Numeric Readout
+            // Numeric Readout (Enforce LTR format so minus sign is always correctly positioned)
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.padding(top = 28.dp)
+                modifier = Modifier.padding(top = 18.dp)
             ) {
                 Text(
-                    text = String.format(Locale.US, "%.1f", displayValue),
+                    text = "\u200E${String.format(Locale.US, "%.1f", displayValue)}",
                     fontFamily = RobotoMonoFontFamily,
-                    fontSize = 44.sp,
+                    fontSize = 28.sp,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface
                 )
@@ -163,22 +163,22 @@ fun LevelMeterGauge(
                     Text(
                         text = unit,
                         fontFamily = RobotoMonoFontFamily,
-                        fontSize = 14.sp,
+                        fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = gaugeColor
                     )
-                    Spacer(modifier = Modifier.width(6.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
                     Box(
                         modifier = Modifier
                             .background(
                                 color = if (isCalibrated) AcousticGreen.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant,
                                 shape = RoundedCornerShape(4.dp)
                             )
-                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                            .padding(horizontal = 4.dp, vertical = 1.dp)
                     ) {
                         Text(
                             text = if (isCalibrated) "מכויל" else "לא מכויל",
-                            fontSize = 10.sp,
+                            fontSize = 9.sp,
                             color = if (isCalibrated) AcousticGreen else MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
@@ -186,7 +186,7 @@ fun LevelMeterGauge(
             }
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(4.dp))
 
         // Mini Grid of Acoustic Sub-Metrics
         Row(
